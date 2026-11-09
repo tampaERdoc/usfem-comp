@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>USF EM Physician Compensation Model</title>
+<style>
+:root{--g:#006747;--g2:#00543a;--gold:#CFC493;--gold2:#EDEBD1;--light:#EEF4F1;--ink:#1d2523;--mut:#5d6b66;--line:#d5ddd9;--bg:#f6f7f6}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+header{background:var(--g);color:#fff;padding:14px 24px;display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}
+header h1{font-size:19px;margin:0;font-weight:600}
+header .sub{opacity:.85;font-size:13px}
+#lock{max-width:380px;margin:12vh auto;background:#fff;border:1px solid var(--line);border-radius:10px;padding:28px}
+#lock h2{margin:0 0 6px;font-size:18px;color:var(--g)}
+#lock p{color:var(--mut);margin:0 0 16px}
+#lock input{width:100%;padding:10px 12px;font-size:15px;border:1px solid var(--line);border-radius:6px}
+#lock button{margin-top:12px;width:100%;padding:10px;background:var(--g);color:#fff;border:0;border-radius:6px;font-size:15px;cursor:pointer}
+#pwmsg{color:#a12;margin-top:10px;min-height:1em}
+#app{display:none;grid-template-columns:minmax(380px,460px) 1fr;gap:20px;padding:20px;align-items:start}
+.card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:16px}
+.card h2{font-size:15px;margin:0 0 10px;color:var(--g)}
+#inputs{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto}
+table{border-collapse:collapse;width:100%}
+.grid td,.grid th{padding:4px 6px;border-bottom:1px solid #eef1ef;text-align:right;white-space:nowrap}
+.grid th{font-size:12px;color:var(--mut);font-weight:600}
+.grid td:first-child,.grid th:first-child{text-align:left;white-space:normal}
+.grid tr.site td{background:var(--gold2);font-weight:600;text-align:left;border-bottom:1px solid var(--gold)}
+.grid input{width:78px;padding:4px 6px;text-align:right;border:1px solid var(--line);border-radius:4px;font:inherit}
+.grid input.rate{width:64px;color:var(--mut)}
+.grid tr.tot td{font-weight:700;border-top:2px solid var(--g);background:var(--light)}
+.th-col{display:none}
+body.show-th .th-col{display:table-cell}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0}
+.row label{font-size:13px;color:var(--mut)}
+select,.row input[type=number],.row input[type=text]{padding:5px 7px;border:1px solid var(--line);border-radius:4px;font:inherit}
+.btn{padding:6px 12px;border:1px solid var(--g);background:#fff;color:var(--g);border-radius:6px;cursor:pointer;font:inherit}
+.btn:hover{background:var(--light)}
+.btn.on{background:var(--g);color:#fff}
+.small{font-size:12px;color:var(--mut)}
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.toolbar .sp{flex:1}
+.seg{display:inline-flex;border:1px solid var(--g);border-radius:7px;overflow:hidden}
+.seg button{border:0;border-right:1px solid var(--g);padding:7px 14px;background:#fff;color:var(--g);cursor:pointer;font:inherit;font-weight:600}
+.seg button:last-child{border-right:0}
+.seg button.on{background:var(--g);color:#fff}
+#out{max-width:900px}
+.doc h3.big{font-size:17px;color:var(--g);margin:22px 0 8px;padding-bottom:4px;border-bottom:3px solid var(--g)}
+.doc h3.big:first-child{margin-top:0}
+.doc .title{font-size:20px;font-weight:700;color:var(--g);margin:0}
+.doc .subtitle{color:var(--mut);margin:2px 0 14px}
+.doc table{margin-bottom:6px;table-layout:fixed}
+.doc td.v.w{white-space:normal}
+.doc table.sum td:first-child{width:46%}
+.doc td{padding:5px 10px;border:1px solid var(--line);vertical-align:top}
+.doc td.v{text-align:right;white-space:nowrap;width:30%}
+.doc tr.sec td{background:var(--gold);font-weight:700;color:#2b2a1d}
+.doc tr.b td{font-weight:700}
+.doc tr.f td{background:var(--light)}
+.doc tr.ind td:first-child{padding-left:26px}
+.doc .note{font-style:italic;color:var(--mut);font-size:12.5px;margin:4px 0 12px}
+.doc table.sum td.c{text-align:center;width:16%}
+.doc table.sum tr.hd td{background:var(--g);color:#fff;font-weight:700}
+.internal{border:2px dashed #b9a24a;border-radius:8px;padding:2px 12px 10px;margin-top:18px}
+.internal .tag{display:inline-block;background:#b9a24a;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:0 0 6px 6px;margin-bottom:6px;letter-spacing:.04em}
+@media (max-width:980px){#app{grid-template-columns:1fr}#inputs{position:static;max-height:none}}
+@media print{
+  header,#inputs,.toolbar,#lock{display:none!important}
+  body{background:#fff}
+  #app{display:block!important;padding:0}
+  .card{border:0;padding:0}
+  .internal{border:0;padding:0}
+  .internal .tag{display:none}
+  .doc h3.big{break-after:avoid}
+  .doc table{break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<header><h1>USF EM Physician Compensation Model</h1><span class="sub">Enter hours by site and shift. The proforma updates as you type.</span><span class="sub" id="ver"></span></header>
+
+<div id="lock">
+  <h2>Enter password</h2>
+  <p>The rates and cost data on this page are encrypted.</p>
+  <input id="pw" type="password" autocomplete="current-password" autofocus>
+  <button id="go">Open</button>
+  <div id="pwmsg"></div>
+</div>
+
+<div id="app">
+  <div id="inputs" class="card">
+    <h2>Hours by site and shift</h2>
+    <div class="row">
+      <label for="preset">Start from</label>
+      <select id="preset"></select>
+      <button class="btn" id="clear">Clear hours</button>
+    </div>
+    <table class="grid" id="grid"></table>
+    <div class="row"><label><input type="checkbox" id="showth"> Show what TeamHealth pays USF per hour</label></div>
+    <h2 style="margin-top:14px">Other inputs</h2>
+    <div class="row"><label for="rank">Rank</label><input type="text" id="rank" style="width:180px"></div>
+    <div class="row"><label for="ucs">UCS base salary</label><input type="number" id="ucs" step="500" style="width:110px"></div>
+    <div class="row"><label for="sb">Signing bonus, paid once in year 1</label><input type="number" id="sb" step="1000" style="width:110px"></div>
+    <div class="row"><label for="tier">Health coverage</label><select id="tier"><option>Family</option><option>Single</option></select></div>
+    <div class="row"><label><input type="checkbox" id="ye" checked> Include the year-end payment (paid only with TGH Main or Brandon hours)</label></div>
+    <p class="small">Physician rates can be edited in the grid. RVU incentive comes from TGH Main hours only. Quarterly PIP comes from TGH Main and Brandon hours only. Kennedy and North hours earn neither.</p>
+  </div>
+
+  <div class="card" id="outcard">
+    <div class="toolbar">
+      <div class="seg" id="views">
+        <button data-v="emp">Employee</button>
+        <button data-v="er">Employer</button>
+        <button data-v="both">Both</button>
+      </div>
+      <span class="sp"></span>
+      <button class="btn" id="copylink">Copy link to this scenario</button>
+      <button class="btn" id="print">Print or save PDF</button>
+    </div>
+    <div id="out" class="doc"></div>
+  </div>
+</div>
+
+<script>// USF EM physician compensation model. Same math as USF_EM_Clinical_Asst_Prof_1FTE_Model.xlsx.
+(function (root) {
+  function pctile(x, pts) {
+    const lo = pts[0], hi = pts[pts.length - 1];
+    if (x < lo[1]) return { n: null, text: "Below " + lo[0] + "th" };
+    if (x > hi[1]) return { n: null, text: "Above " + hi[0] + "th" };
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [p1, v1] = pts[i], [p2, v2] = pts[i + 1];
+      if (x <= v2) { const n = p1 + (p2 - p1) * (x - v1) / (v2 - v1); return { n, text: ordinal(Math.round(n)) }; }
+    }
+    return { n: null, text: "" };
+  }
+  function ordinal(n) {
+    const m = n % 100; if (m >= 11 && m <= 13) return n + "th";
+    return n + (["th", "st", "nd", "rd"][n % 10] || "th");
+  }
+
+  function compute(P, hours, o) {
+    o = o || {};
+    const ucsBase = o.ucs != null ? o.ucs : P.ucs;
+    const sb = o.signingBonus != null ? o.signingBonus : P.signing_bonus;
+    const tier = o.tier || "Family";
+    const rates = o.rates || {};
+    const R = {};
+    // hours and base pay
+    R.lines = P.shifts.map(s => {
+      const h = +hours[s.id] || 0, rate = rates[s.id] != null ? rates[s.id] : s.rate;
+      return { ...s, hours: h, rate, pay: h * rate, thPay: h * s.th, spread: h * (s.th - rate) };
+    });
+    R.hours = R.lines.reduce((a, l) => a + l.hours, 0);
+    R.base = R.lines.reduce((a, l) => a + l.pay, 0);
+    R.ucs = Math.min(ucsBase, R.base);
+    R.asf = R.base - R.ucs;
+    R.mixedRate = R.hours ? R.base / R.hours : 0;
+    R.fte = R.hours / P.fte_hours;
+    // incentive
+    R.mainHours = R.lines.filter(l => l.rvu).reduce((a, l) => a + l.hours, 0);
+    R.bhpHours = R.lines.filter(l => l.pip === "bhp").reduce((a, l) => a + l.hours, 0);
+    R.pipHours = R.lines.filter(l => l.pip).reduce((a, l) => a + l.hours, 0);
+    R.floor = Math.round(P.rvu_hurdle / P.rvu_modifier * 100) / 100;
+    const inc = k => {
+      const q = Math.max(0, Math.round((P.rvu_per_hour[k] - R.floor) * 100) / 100);
+      const rvu = R.mainHours * q * P.rvu_modifier * (1 - P.rvu_carve);
+      const pip = R.mainHours * P.pip_per_hour.main + R.bhpHours * P.pip_per_hour.bhp;
+      const ye = (o.yearEnd !== false && R.pipHours > 0) ? P.year_end : 0;
+      return { q, rvu, pip, ye, total: rvu + pip + ye };
+    };
+    R.inc = inc("avg"); R.inc25 = inc("p25"); R.inc75 = inc("p75");
+    R.rvuPerHour = P.rvu_per_hour.avg;
+    R.incentive = R.inc.total;
+    // retirement
+    R.susorp = R.ucs * P.susorp_employer;
+    R.r403 = Math.min(R.asf + R.incentive, P.comp_limit) * P.asf_403b;
+    R.retTotal = R.susorp + R.r403;
+    // health
+    R.tier = tier;
+    R.healthUsf = P.health[tier].usf * 12;
+    R.healthYouMonthly = P.health[tier].you;
+    // totals
+    R.sb = sb; R.payback = P.payback_years;
+    R.y2Pay = R.base + R.incentive;
+    R.y1Pay = R.y2Pay + sb;
+    R.y1Value = R.y1Pay + R.retTotal + R.healthUsf;
+    R.y2Value = R.y2Pay + R.retTotal + R.healthUsf;
+    R.payUcs = R.ucs / P.ucs_pay_periods;
+    R.payAsf = R.asf / 12;
+    R.payInc = R.incentive / 12;
+    R.payMonthly = R.ucs / 12 + R.payAsf + R.payInc;
+    // employer
+    const asfPay = R.asf + R.incentive;
+    R.d = {};
+    R.d.pay = R.ucs + R.asf + R.incentive;
+    R.d.ucsFringe = R.ucs * P.ucs_fringe;
+    R.d.ss = Math.min(asfPay, P.ss_wage_base) * P.ss;
+    R.d.med = asfPay * P.medicare;
+    R.d.r403 = Math.min(asfPay, P.comp_limit) * P.asf_403b;
+    const ins = P.asf_insurance_monthly;
+    R.d.ins = (ins.life + ins.ltd + ins.std + ins.salary_continuation) * 12;
+    R.d.asfBen = R.d.ss + R.d.med + R.d.r403 + R.d.ins;
+    R.d.dean = R.base * P.deans_tax;
+    R.d.mal = P.malpractice; R.d.cme = P.cme;
+    R.d.benefits = R.d.ucsFringe + R.d.asfBen;
+    R.d.sb = sb * (1 + P.medicare);
+    R.d.y2 = R.d.pay + R.d.benefits + R.d.dean + R.d.mal + R.d.cme;
+    R.d.y1 = R.d.y2 + R.d.sb;
+    // TeamHealth funding (hourly rates in the FY27 USF-InPhyNet agreement, Attachment A)
+    R.th = {};
+    R.th.revenue = R.lines.reduce((a, l) => a + l.thPay, 0);
+    R.th.spread = R.lines.reduce((a, l) => a + l.spread, 0);
+    R.th.mainSpread = R.lines.filter(l => l.pip === "main").reduce((a, l) => a + l.spread, 0);
+    R.th.bhpSpread = R.lines.filter(l => l.pip === "bhp").reduce((a, l) => a + l.spread, 0);
+    R.th.otherSpread = R.th.spread - R.th.mainSpread - R.th.bhpSpread;
+    R.th.afterRvu = R.th.spread - R.inc.rvu;
+    R.th.gapY2 = R.d.y2 - R.th.revenue;
+    R.th.gapY1 = R.d.y1 - R.th.revenue;
+    // benchmarks
+    R.bench = {};
+    for (const k of ["mgma", "aamc_south", "aamc_all"]) {
+      const b = P[k], med = b.points.find(p => p[0] === 50)[1];
+      R.bench[k] = { label: b.label, points: b.points, mean: b.mean,
+        y1: pctile(R.y1Pay, b.points), y2: pctile(R.y2Pay, b.points), vsMedian: R.y2Pay - med };
+    }
+    return R;
+  }
+  const api = { compute, pctile, ordinal };
+  if (typeof module !== "undefined") module.exports = api; else root.CompModel = api;
+})(this);
+</script>
+<script>
+const ENC = {"salt": "k+rxpX6aDSpEqyTnG3RySQ==", "iv": "s6397M5jMMf5a5vm", "ct": "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", "iter": 250000};
+let EMBED = false; try { EMBED = window.top !== window; } catch (e) { EMBED = true; }
+const $ = s => document.querySelector(s);
+let P = null, state = { hours: {}, rates: {}, view: "both", rank: null, ucs: null, sb: null, tier: "Family", ye: true };
+
+// ---------- decryption ----------
+const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+async function decrypt(pw) {
+  const key0 = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveKey"]);
+  const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: b64(ENC.salt), iterations: ENC.iter, hash: "SHA-256" },
+    key0, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+  const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(ENC.iv) }, key, b64(ENC.ct));
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+async function unlock(pw, silent) {
+  if (!window.crypto || !crypto.subtle) { $("#pwmsg").textContent = "This page needs a secure (https) connection."; return; }
+  try {
+    P = await decrypt(pw);
+    try { sessionStorage.setItem("usfem_comp_pw", pw); } catch (e) {}
+    $("#lock").style.display = "none"; $("#app").style.display = "grid";
+    init();
+  } catch (e) { if (!silent) $("#pwmsg").textContent = "That password did not work."; }
+}
+$("#go").onclick = () => unlock($("#pw").value);
+$("#pw").addEventListener("keydown", e => { if (e.key === "Enter") unlock($("#pw").value); });
+if (location.protocol === "http:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") location.replace("https://" + location.host + location.pathname + location.hash);
+try { const saved = sessionStorage.getItem("usfem_comp_pw"); if (saved) unlock(saved, true); } catch (e) {}
+
+// ---------- formatting ----------
+const money = (v, d = 0) => (v < 0 ? "−$" : "$") + Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+const num = (v, d = 0) => v.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+const signed = v => (v >= 0 ? "+" : "−") + "$" + Math.abs(Math.round(v)).toLocaleString("en-US");
+const pct = (v, d = 1) => (v * 100).toFixed(d).replace(/\.0+$/, "") + "%";
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// ---------- inputs ----------
+function init() {
+  $("#ver").textContent = "Rates and costs " + P.version;
+  const sel = $("#preset");
+  sel.innerHTML = '<option value="">Choose a starting mix</option>' + Object.keys(P.presets).map(k => `<option>${esc(k)}</option>`).join("");
+  sel.onchange = () => { if (sel.value) { state.hours = { ...P.presets[sel.value] }; fillGrid(); update(); } };
+  $("#clear").onclick = () => { state.hours = {}; sel.value = ""; fillGrid(); update(); };
+  buildGrid();
+  readHash();
+  if (!Object.keys(state.hours).length) state.hours = { ...P.presets[Object.keys(P.presets)[0]] };
+  $("#rank").value = state.rank || P.rank; $("#ucs").value = state.ucs != null ? state.ucs : P.ucs;
+  $("#sb").value = state.sb != null ? state.sb : P.signing_bonus; $("#tier").value = state.tier; $("#ye").checked = state.ye;
+  for (const id of ["rank", "ucs", "sb", "tier", "ye"]) $("#" + id).addEventListener("input", update);
+  $("#showth").onchange = () => { document.body.classList.toggle("show-th", $("#showth").checked); };
+  document.querySelectorAll("#views button").forEach(b => b.onclick = () => { state.view = b.dataset.v; update(); });
+  $("#print").onclick = () => window.print();
+  if (EMBED) { $("#print").style.display = "none"; $("#copylink").style.display = "none"; }
+  $("#copylink").onclick = async () => {
+    writeHash();
+    try { await navigator.clipboard.writeText(location.href); $("#copylink").textContent = "Link copied"; }
+    catch (e) { $("#copylink").textContent = "Link is in the address bar"; }
+    setTimeout(() => $("#copylink").textContent = "Copy link to this scenario", 1800);
+  };
+  fillGrid(); update();
+}
+function buildGrid() {
+  let h = '<tr><th>Site and shift</th><th>Rate per hour</th><th class="th-col">TeamHealth pays</th><th>Hours per year</th><th>Base pay</th></tr>';
+  let site = null;
+  for (const s of P.shifts) {
+    if (s.site !== site) { site = s.site; h += `<tr class="site"><td colspan="5">${esc(site)}</td></tr>`; }
+    h += `<tr><td>${esc(s.shift)}</td><td><input class="rate" type="number" step="1" data-r="${s.id}" value="${s.rate}" aria-label="${esc(site + " " + s.shift)} rate"></td>
+      <td class="th-col">${money(s.th)}</td>
+      <td><input type="number" min="0" step="12" data-h="${s.id}" aria-label="${esc(site + " " + s.shift)} hours"></td><td id="pay_${s.id}"></td></tr>`;
+  }
+  h += '<tr class="tot"><td>Total</td><td id="t_rate"></td><td class="th-col" id="t_th"></td><td id="t_hrs"></td><td id="t_pay"></td></tr>';
+  $("#grid").innerHTML = h;
+  document.querySelectorAll("[data-h]").forEach(i => i.addEventListener("input", () => { state.hours[i.dataset.h] = +i.value || 0; $("#preset").value = ""; update(); }));
+  document.querySelectorAll("[data-r]").forEach(i => i.addEventListener("input", () => { state.rates[i.dataset.r] = +i.value || 0; update(); }));
+}
+function fillGrid() {
+  document.querySelectorAll("[data-h]").forEach(i => { const v = state.hours[i.dataset.h]; i.value = v ? v : ""; });
+  document.querySelectorAll("[data-r]").forEach(i => { const v = state.rates[i.dataset.r]; i.value = v != null ? v : P.shifts.find(s => s.id === i.dataset.r).rate; });
+}
+function writeHash() {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(state.hours)) if (v) q.set(k, v);
+  for (const [k, v] of Object.entries(state.rates)) if (v !== P.shifts.find(s => s.id === k).rate) q.set("r_" + k, v);
+  q.set("view", state.view); q.set("tier", state.tier); if (!state.ye) q.set("ye", "0");
+  if (state.rank && state.rank !== P.rank) q.set("rank", state.rank);
+  if (state.ucs != null && state.ucs !== P.ucs) q.set("ucs", state.ucs);
+  if (state.sb != null && state.sb !== P.signing_bonus) q.set("sb", state.sb);
+  try { if (!EMBED) history.replaceState(null, "", "#" + q.toString()); } catch (e) {}
+}
+function readHash() {
+  if (EMBED || !location.hash) return;
+  const q = new URLSearchParams(location.hash.slice(1)); const ids = P.shifts.map(s => s.id);
+  for (const [k, v] of q) {
+    if (ids.includes(k)) state.hours[k] = +v;
+    else if (k.startsWith("r_") && ids.includes(k.slice(2))) state.rates[k.slice(2)] = +v;
+  }
+  if (q.get("view")) state.view = q.get("view");
+  if (q.get("tier")) state.tier = q.get("tier");
+  if (q.get("ye") === "0") state.ye = false;
+  if (q.get("rank")) state.rank = q.get("rank");
+  if (q.get("ucs")) state.ucs = +q.get("ucs");
+  if (q.get("sb")) state.sb = +q.get("sb");
+}
+
+// ---------- output ----------
+function update() {
+  state.rank = $("#rank").value; state.ucs = +$("#ucs").value; state.sb = +$("#sb").value;
+  state.tier = $("#tier").value; state.ye = $("#ye").checked;
+  const R = CompModel.compute(P, state.hours, { rates: state.rates, ucs: state.ucs, signingBonus: state.sb, tier: state.tier, yearEnd: state.ye });
+  for (const l of R.lines) $("#pay_" + l.id).textContent = l.hours ? money(l.pay) : "";
+  $("#t_hrs").textContent = num(R.hours) + " (" + pct(R.fte, 0) + " FTE)";
+  $("#t_pay").textContent = money(R.base); $("#t_rate").textContent = R.hours ? money(R.mixedRate, 2) : "";
+  $("#t_th").textContent = money(R.th.revenue);
+  document.querySelectorAll("#views button").forEach(b => b.classList.toggle("on", b.dataset.v === state.view));
+  render(R);
+  writeHash();
+}
+
+function render(R) {
+  const T = []; const push = s => T.push(s);
+  const row = (label, val, cls = "", vc = "") => push(`<tr class="${cls}"><td>${label}</td><td class="v ${vc}">${val}</td></tr>`);
+  const sec = t => push(`<tr class="sec"><td colspan="2">${t}</td></tr>`);
+  const open = () => push("<table>"), close = () => push("</table>");
+  const note = t => push(`<p class="note">${t}</p>`);
+  const ph = v => `${money(v)} (${money(R.hours ? v / R.hours : 0, 2)}/hr)`;
+  const mg = R.bench.mgma, as = R.bench.aamc_south, aa = R.bench.aamc_all;
+  const fteTxt = R.hours ? `${R.fte.toFixed(2).replace(/0$/, "")} Clinical FTE (${num(R.hours)} hours)` : "No hours entered";
+  const showEmp = state.view !== "er", showEr = state.view !== "emp";
+
+  push(`<p class="title">Clinical ${esc(state.rank || P.rank)}, ${fteTxt}</p>`);
+  push(`<p class="subtitle">Salary, retirement and benefits estimate${showEr ? (showEmp ? ", with department costs" : ", department costs") : ""}</p>`);
+
+  if (showEmp) {
+    push('<h3 class="big">Employee</h3>');
+    open(); sec("Position");
+    row("Academic rank", esc(state.rank || P.rank));
+    row("Pathway and tenure status", esc(P.pathway));
+    row("Annual clinical hours", num(R.hours));
+    for (const l of R.lines) if (l.hours) row(`${esc(l.site)} ${esc(l.shift)}`, `${num(l.hours)} hrs at ${money(l.rate)} = ${money(l.pay)}`, "ind");
+    sec("Base salary (guaranteed, built from hours at each site and shift rate)");
+    row("University Contracted Salary (UCS)", money(R.ucs));
+    row("Academic Support Fund (ASF) practice plan salary", money(R.asf));
+    row("Total base salary", money(R.base), "b f");
+    row("Mixed clinical rate (base salary per clinical hour)", money(R.mixedRate, 2));
+    sec("Estimated annual incentive (group average, not guaranteed, amount per clinical hour in parentheses)");
+    row("RVUs per hour (group average)", num(R.rvuPerHour, 2));
+    row("RVU modifier", money(P.rvu_modifier, 2));
+    row(`RVU floor (${money(P.rvu_hurdle)} hurdle divided by the ${money(P.rvu_modifier, 2)} modifier)`, num(R.floor, 2));
+    row(`Qualified RVUs per hour (${num(R.rvuPerHour, 2)} minus ${num(R.floor, 2)})`, num(R.inc.q, 2));
+    row("TGH Main hours (the only hours that generate RVUs)", num(R.mainHours));
+    row(`RVU incentive (paid monthly), ${num(R.mainHours)} x ${num(R.inc.q, 2)} x ${money(P.rvu_modifier, 2)}`, ph(R.inc.rvu));
+    row("PIP-eligible hours (TGH Main and Brandon Healthplex)", num(R.pipHours));
+    row("Annual sum of quarterly PIP payments", ph(R.inc.pip));
+    row("Estimated median annual year-end payment", ph(R.inc.ye));
+    row("Total estimated incentive", ph(R.incentive), "b f");
+    row("Estimated incentive range (25th to 75th percentile)", `${money(R.inc25.total)} to ${money(R.inc75.total)}`);
+    row("Estimated total pay per clinical hour (base + average incentive)", money(R.hours ? R.y2Pay / R.hours : 0, 2), "b f");
+    sec("Retirement contributions USF pays for you (not a deduction from your pay)");
+    row(`USF pays into your SUSORP retirement account (${pct(P.susorp_employer, 2)} of UCS)`, money(R.susorp));
+    row(`USF pays into your USF Health 403(b) (${pct(P.asf_403b, 2)} of ASF base, RVU and PIP pay)`, money(R.r403));
+    row("Total USF pays into your retirement", money(R.retTotal), "b f");
+    sec("Employer health insurance");
+    row(`USF pays per year (State of Florida health plan, ${R.tier.toLowerCase()} coverage)`, money(R.healthUsf));
+    row("You pay per year (your premium, standard plan)", `${money(R.healthYouMonthly * 12)} (${money(R.healthYouMonthly)} per month)`);
+    sec("Total compensation");
+    row(`Year 1 signing bonus (paid once, ${R.payback} year payback, ${money(R.sb / (R.payback * 12), 2)} earned per month)`, money(R.sb));
+    row("Year 1 Pay (base, average incentive and signing bonus)", money(R.y1Pay), "b f");
+    row("Year 1 Pay percentile, MGMA and AAMC Southern Region", `MGMA ${mg.y1.text}, AAMC ${as.y1.text}`, "ind");
+    row("Year 1 Total Compensation and Benefits Value", money(R.y1Value), "b f");
+    row("Year 2 Pay (base and average incentive)", money(R.y2Pay), "b");
+    row("Year 2 Pay percentile, MGMA and AAMC Southern Region", `MGMA ${mg.y2.text}, AAMC ${as.y2.text}`, "ind");
+    row("Year 2 Total Compensation and Benefits Value", money(R.y2Value), "b f");
+    sec("Actual paycheck distribution");
+    row(`Biweekly UCS pay (${money(R.ucs)} / ${num(P.ucs_pay_periods, 1)})`, money(R.payUcs, 2));
+    row(`Monthly ASF pay (${money(R.asf)} / 12)`, money(R.payAsf, 2));
+    row(`Monthly ASF incentive pay (${money(R.incentive)} / 12, some incentive pay is actually quarterly and one payment is annual)`, money(R.payInc, 2));
+    row("Average monthly gross pay (UCS + ASF base + ASF incentives)", money(R.payMonthly, 2), "b f");
+    close();
+    note("Base salary is built from hours at each site and shift rate. Incentive is estimated from FY27 group results and is not guaranteed. Amounts are before tax withholding. Percentiles compare cash pay with MGMA 2026 (all practice settings) and AAMC FY2025 Assistant Professor, Southern Region.");
+    note(`The signing bonus is paid once within 60 days of your start date. If you leave before the ${R.payback === 3 ? "third" : R.payback + " year"} anniversary, the unearned portion is repaid as described in the term sheet.`);
+  }
+
+  if (showEr) {
+    push('<div class="internal"><span class="tag">INTERNAL, REMOVE BEFORE SENDING TO A CANDIDATE</span>');
+    push('<h3 class="big">Employer (department costs, internal)</h3>');
+    open(); sec("Salary and incentive paid");
+    row("UCS base salary", money(R.ucs)); row("ASF base salary", money(R.asf));
+    row("ASF incentive pay (RVU, PIP and year-end, group average)", money(R.incentive));
+    row("Total salary and incentive", money(R.d.pay), "b");
+    sec("UCS benefits cost");
+    row(`UCS fringe (${pct(P.ucs_fringe)} of UCS, FY27 faculty rate). Goes to employer FICA, state retirement (SUSORP or FRS), State health insurance and life insurance`, money(R.d.ucsFringe));
+    sec("ASF benefits cost");
+    row(`Social Security (${pct(P.ss)} of ASF pay up to the wage base). Goes to federal Social Security (employer FICA)`, money(R.d.ss));
+    row(`Medicare (${pct(P.medicare, 2)} of all ASF pay). Goes to federal Medicare (employer FICA)`, money(R.d.med));
+    row(`ASF retirement (${pct(P.asf_403b, 2)} of ASF base, RVU and PIP pay). Goes to the ASF 403(b) employer retirement contribution in the physician account`, money(R.d.r403));
+    const i = P.asf_insurance_monthly;
+    row(`ASF insurance (life ${money(i.life)}, long-term disability ${money(i.ltd)}, short-term disability ${money(i.std)}, salary continuation ${money(i.salary_continuation)} per month). Goes to USF Health group insurance premiums`, money(R.d.ins));
+    row("Total ASF benefits cost", money(R.d.asfBen), "b");
+    sec("Dean's tax, malpractice and CME (recruitment proforma)");
+    row(`Dean's tax, DASF (${pct(P.deans_tax)} of base salary). Goes to the MCOM Dean's Academic Support Fund`, money(R.d.dean));
+    row("Malpractice. Goes to the USF Self-Insurance Program", money(R.d.mal));
+    row("CME. Goes to CME, license and board fee reimbursement", money(R.d.cme));
+    sec("Total department cost");
+    row("Total benefits cost (UCS and ASF)", money(R.d.benefits));
+    row(`Plus in year 1 only, signing bonus (${money(R.sb)} plus ${money(R.sb * P.medicare)} Medicare). Not a total`, money(R.d.sb));
+    row("Year 1 Department Cost (salary, incentive, benefits, Dean's tax, malpractice, CME and signing bonus)", money(R.d.y1), "b f");
+    row("Year 2 Department Cost (salary, incentive, benefits, Dean's tax, malpractice and CME)", money(R.d.y2), "b f");
+    sec("TeamHealth funding for these hours (FY27 USF and InPhyNet agreement, Attachment A)");
+    row("TeamHealth pays USF for these clinical hours", money(R.th.revenue));
+    row("Spread above physician base pay, TGH Main", money(R.th.mainSpread), "ind");
+    row("Spread above physician base pay, Brandon Healthplex", money(R.th.bhpSpread), "ind");
+    if (Math.abs(R.th.otherSpread) > 0.5) row("Spread above physician base pay, other sites", money(R.th.otherSpread), "ind");
+    row("Total spread (funds RVU incentive and PIP)", money(R.th.spread), "b");
+    row("Spread left after the RVU incentive (toward PIP)", money(R.th.afterRvu));
+    row("Year 2 Department Cost above the TeamHealth hourly payments", money(R.th.gapY2), "b f");
+    row("Year 1 Department Cost above the TeamHealth hourly payments", money(R.th.gapY1), "b f");
+    close();
+    note("Health insurance and SUSORP sit inside the UCS fringe, so they are not added again. The signing bonus is ASF pay, so Medicare applies to it. Department overhead is capped and not included. Kennedy and North hours have no spread because TeamHealth pays the physician rate. Costs above the hourly payments are funded from other sources, such as the TeamHealth administrative cost payments.");
+
+    push('<h3 class="big">Benchmarks (cash pay)</h3>');
+    open();
+    for (const b of [mg, as, aa]) {
+      sec(esc(b.label));
+      row("Published points", b.points.map(([p, v]) => (p === 50 ? "median" : p + "th") + " " + money(v)).join(", ") + ", mean " + money(b.mean), "", "w");
+      row("Year 1 Pay (with signing bonus), percentile", b.y1.text, "b");
+      row("Year 2 Pay, percentile", b.y2.text, "b");
+      row("Year 2 Pay compared with the median", signed(b.vsMedian));
+    }
+    close();
+    note("Percentiles are interpolated between the published points. MGMA covers all practice settings and is not adjusted for clinical hours. AAMC is the closer comparison for academic faculty.");
+
+    push('<h3 class="big">Summary</h3>');
+    push('<table class="sum"><tr class="hd"><td></td><td class="v">Amount</td><td class="c">MGMA percentile</td><td class="c">AAMC Southern Region percentile</td></tr>');
+    const sr = (l, v, a = "", b = "", cls = "b") => push(`<tr class="${cls}"><td>${l}</td><td class="v">${money(v)}</td><td class="c">${a}</td><td class="c">${b}</td></tr>`);
+    sr("Year 1 Pay (with signing bonus)", R.y1Pay, mg.y1.text, as.y1.text, "b f");
+    sr("Year 2 Pay", R.y2Pay, mg.y2.text, as.y2.text, "b f");
+    sr("Year 1 Total Compensation and Benefits Value", R.y1Value);
+    sr("Year 2 Total Compensation and Benefits Value", R.y2Value);
+    sr("Year 1 Department Cost", R.d.y1, "", "", "b f");
+    sr("Year 2 Department Cost", R.d.y2, "", "", "b f");
+    push("</table></div>");
+  }
+  $("#out").innerHTML = T.join("");
+}
+</script>
+</body>
+</html>

@@ -90,7 +90,14 @@ select,.row input[type=number],.row input[type=text]{padding:5px 7px;border:1px 
 
 <div id="app">
   <div id="inputs" class="card">
-    <h2>Hours by site and shift</h2>
+    <h2>Describe the position</h2>
+    <div class="row" style="flex-wrap:nowrap">
+      <input type="text" id="desc" style="flex:1;padding:8px 10px;font-size:14px" placeholder="Assistant Professor, full time. Half Spring Hill, 1/4 Main, 1/4 BHP">
+      <button class="btn on" id="build">Build</button>
+    </div>
+    <div id="readback" class="small" style="min-height:1.2em"></div>
+    <p class="small" style="margin-top:4px">Write a rank, a total (full time, 0.75 FTE, half time or 1,200 hours) and shares by site (half, 1/4, 25%, 600 hours, the rest). Add days, nights, pivot or nocturnist to set shifts. Main is split evenly across day, pivot day, night and pivot night unless you say otherwise. The other sites are split half day and half night.</p>
+    <h2 style="margin-top:14px">Hours by site and shift</h2>
     <div class="row">
       <label for="preset">Start from</label>
       <select id="preset"></select>
@@ -226,12 +233,125 @@ select,.row input[type=number],.row input[type=text]{padding:5px 7px;border:1px 
     }
     return R;
   }
-  const api = { compute, pctile, ordinal };
+
+  // ---------- plain-English description -> hours ----------
+  const SITES = [
+    { key: "main", name: "TGH Main", re: /\b(tgh\s*main|main(\s*campus)?|davis\s*islands?|tgh|amc)\b/ },
+    { key: "bhp", name: "Brandon Healthplex", re: /\b(bhp|brandon(\s*healthplex)?|healthplex)\b/ },
+    { key: "ken", name: "Kennedy", re: /\bkennedy\b/ },
+    { key: "cr", name: "Crystal River", re: /\b(crystal\s*river|cr)\b/ },
+    { key: "sh", name: "Brooksville and Spring Hill", re: /\b(spring\s*hill|brooksville|north\s*other)\b/ },
+    { key: "north", name: "North sites", re: /\bnorth(\s*sites?)?\b/ },
+  ];
+  const WORDS = [
+    [/\bthree[\s-]*quarters?\b|\b3\s*quarters?\b/, 0.75], [/\btwo[\s-]*thirds?\b/, 2 / 3],
+    [/\b(one|a)[\s-]*thirds?\b|\bthird\b/, 1 / 3], [/\b(one|a)[\s-]*quarter\b|\bquarter\b|\bfourth\b/, 0.25],
+    [/\b(one[\s-]*)?half\b/, 0.5], [/\b(all|only|entirely|exclusively)\b/, 1],
+  ];
+  function amountIn(seg) {
+    let m;
+    if ((m = seg.match(/(\d[\d,]*)\s*(hours|hrs|hr|h)\b/))) return { hours: +m[1].replace(/,/g, "") };
+    if ((m = seg.match(/(\d+(?:\.\d+)?)\s*%/))) return { frac: +m[1] / 100 };
+    if ((m = seg.match(/(\d+)\s*\/\s*(\d+)/))) return { frac: +m[1] / +m[2] };
+    for (const [re, v] of WORDS) if (re.test(seg)) return { frac: v };
+    return null;
+  }
+  function shiftIn(seg) {
+    if (/pivot\s*nights?/.test(seg)) return "pivotnight";
+    if (/pivot\s*days?/.test(seg)) return "pivotday";
+    if (/\bpivots?\b/.test(seg)) return "pivot";
+    if (/\bmid[\s-]*days?\b/.test(seg)) return "midday";
+    if (/\b(nights?|overnights?|nocturnist)\b/.test(seg)) return "night";
+    if (/\bdays?\b|\bdaytime\b/.test(seg)) return "day";
+    return null;
+  }
+  const SPLIT = {
+    main: { null: { md: .25, pd: .25, mn: .25, pn: .25 }, day: { md: .5, pd: .5 }, night: { mn: .5, pn: .5 },
+            pivot: { pd: .5, pn: .5 }, pivotday: { pd: 1 }, pivotnight: { pn: 1 }, midday: { mm: 1 } },
+    bhp: { null: { bd: .5, bn: .5 }, day: { bd: 1 }, night: { bn: 1 } },
+    ken: { null: { kd: .5, kn: .5 }, day: { kd: 1 }, night: { kn: 1 } },
+    cr: { null: { cd: .5, cn: .5 }, day: { cd: 1 }, night: { cn: 1 } },
+    sh: { null: { sd: .5, sn: .5 }, day: { sd: 1 }, night: { sn: 1 } },
+    north: { null: { cd: .25, cn: .25, sd: .25, sn: .25 }, day: { cd: .5, sd: .5 }, night: { cn: .5, sn: .5 } },
+  };
+  const SHIFT_WORD = { day: "days", night: "nights", pivot: "pivot shifts", pivotday: "pivot days", pivotnight: "pivot nights", midday: "middays" };
+
+  function parseDescription(text, P) {
+    const out = { hours: {}, rank: null, total: null, read: [], warnings: [] };
+    let t = " " + String(text || "").toLowerCase().replace(/[–—]/g, "-") + " ";
+    // rank
+    let m;
+    if ((m = t.match(/\b(clinical\s+)?(instructor|assistant\s*prof(essor)?|associate\s*prof(essor)?|full\s*prof(essor)?|professor|asst\.?\s*prof|assoc\.?\s*prof)\b/))) {
+      const r = m[2];
+      out.rank = /instructor/.test(r) ? "Instructor" : /ass(istan)?t|asst/.test(r) ? "Assistant Professor" : /assoc/.test(r) ? "Associate Professor" : "Professor";
+      t = t.replace(m[0], " ");
+    }
+    // total effort
+    const full = P.fte_hours;
+    if ((m = t.match(/\b(\d[\d,]*)\s*(total\s*)?(annual\s*)?(clinical\s*)?(hours|hrs)\s*(total|per\s*year|a\s*year|annually)\b/)) ||
+        (m = t.match(/\btotal\s*(of\s*)?(\d[\d,]*)\s*(hours|hrs)\b/))) {
+      out.total = +(m[1].match(/\d/) ? m[1] : m[2]).replace(/,/g, ""); t = t.replace(m[0], " ");
+    } else if ((m = t.match(/\bfull[\s-]*time\b|\b1(\.0+)?\s*c?fte\b|\b100\s*%\s*c?fte\b/))) { out.total = full; t = t.replace(m[0], " "); }
+    else if ((m = t.match(/\bhalf[\s-]*time\b/))) { out.total = full / 2; t = t.replace(m[0], " "); }
+    else if ((m = t.match(/\b(0?\.\d+)\s*c?fte\b/)) || (m = t.match(/\b(\d+(?:\.\d+)?)\s*%\s*c?fte\b/))) {
+      const v = +m[1]; out.total = (v > 1 ? v / 100 : v) * full; t = t.replace(m[0], " ");
+    } else if ((m = t.match(/\bpart[\s-]*time\b/))) { out.warnings.push("Part time was read as 0.5 FTE. Type 0.75 FTE or an hours total to change it."); out.total = full / 2; t = t.replace(m[0], " "); }
+    const globalShift = /\bnocturnist\b/.test(t) ? "night" : null;
+    // find site mentions in order
+    const hits = [];
+    for (const s of SITES) {
+      const re = new RegExp(s.re.source, "g"); let x;
+      while ((x = re.exec(t))) hits.push({ s, start: x.index, end: x.index + x[0].length });
+    }
+    hits.sort((a, b) => a.start - b.start);
+    const kept = []; for (const h of hits) if (!kept.length || h.start >= kept[kept.length - 1].end) kept.push(h);
+    if (!kept.length) { out.warnings.push("No site found. Name TGH Main, Brandon (BHP), Kennedy, Crystal River, Spring Hill or Brooksville."); return out; }
+    if (out.total == null) out.total = full;
+    const parts = kept.map((h, i) => {
+      const before = t.slice(i ? kept[i - 1].end : 0, h.start);
+      const after = t.slice(h.end, i < kept.length - 1 ? kept[i + 1].start : t.length);
+      // words right after a site ("Main nights", "BHP days only") belong to that site
+      const near = after.split(/[,;.]|\band\b/)[0];
+      const seg = before.split(/[,;.]|\band\b/).pop() + " " + near;
+      let amt = amountIn(before.split(/[,;.]|\band\b/).pop()) || amountIn(near);
+      const sh = shiftIn(seg) || globalShift;
+      return { key: h.s.key, name: h.s.name, amt, shift: sh };
+    });
+    // merge duplicate mentions of the same site and shift
+    let fixedHours = 0, fracSum = 0, open = 0;
+    for (const p of parts) {
+      if (p.amt && p.amt.hours != null) { p.h = p.amt.hours; fixedHours += p.h; }
+      else if (p.amt) fracSum += p.amt.frac; else open++;
+    }
+    const remainFrac = Math.max(0, 1 - fracSum - fixedHours / out.total);
+    if (fracSum + fixedHours / out.total > 1.0001) out.warnings.push("The shares add to more than 100%, so they were scaled down to fit the total.");
+    const scale = fracSum + fixedHours / out.total > 1.0001 ? 1 / (fracSum + fixedHours / out.total) : 1;
+    for (const p of parts) {
+      if (p.h == null) p.h = p.amt ? p.amt.frac * out.total * scale : (open ? remainFrac * out.total / open : 0);
+      else p.h *= scale;
+    }
+    if (!open && remainFrac > 0.0001 && fixedHours === 0) out.warnings.push(`${Math.round(remainFrac * 100)}% of the hours were not assigned to a site.`);
+    // spread across shifts, whole hours, totals preserved
+    for (const p of parts) {
+      const split = (SPLIT[p.key][p.shift] || SPLIT[p.key][null]);
+      if (p.shift && !SPLIT[p.key][p.shift]) out.warnings.push(`${SHIFT_WORD[p.shift]} do not apply at ${p.name}, so its usual split was used.`);
+      const ids = Object.keys(split); let used = 0; const target = Math.round(p.h);
+      ids.forEach((id, i) => {
+        const v = i === ids.length - 1 ? target - used : Math.round(target * split[id]);
+        used += v; out.hours[id] = (out.hours[id] || 0) + v;
+      });
+      const shiftTxt = p.shift && SPLIT[p.key][p.shift] ? " " + SHIFT_WORD[p.shift] : "";
+      out.read.push(`${p.name}${shiftTxt} ${target.toLocaleString("en-US")} hrs`);
+    }
+    return out;
+  }
+
+  const api = { compute, pctile, ordinal, parseDescription };
   if (typeof module !== "undefined") module.exports = api; else root.CompModel = api;
 })(this);
 </script>
 <script>
-const ENC = {"salt": "k+rxpX6aDSpEqyTnG3RySQ==", "iv": "s6397M5jMMf5a5vm", "ct": "4cVueRXlvPPjV3SdZ4R+Vts3SXr6/DRT9X2GVr8rlwH69DMwvhRtSmzM5cgI5Tv2jJ+m+jlFfSihMb9hYmXRn1LTcQ5TzgO/KElzxG7Ji2r7/If+MYRnorcj8KHVvH/e6ulNKoCgKFtbvrbSYSyNPctUUPvW2QxeLYOxF+OImusIen/g/1qKVOFrY59D6PtKZdwiaCp/175QnXWmhs0H/UVKUsgyau+hMg9n7uAF0cZDYsD1tqycoGHrjWRvGFFkityeCZPULNgufkRQmCdLzUGbSdE1tamgUj3OoeUTXEheUf67wGubAaq00j+jaIc6ka661iS75bX+hze58rbVJ7vwj68GrHkEJbSw4az72zBnnu8Hk4xi7VD0rGXooGQNmMbc7Cs9Sga20fREkp0XSAFf9ciTo+gCgKHy9bCdJMSNsMWusnQ6i7ttWbCEWxa3RyPoLOmrwAj6cXodTIpYwRUkVUJ8XmgesoytZ7beLf2ae/jQLhlaeytHt/ftj2INwF/OTHbLXnYafh+20SkfvYgeGan/mcVrhUP3gwvN5F+zxIR73wsdSPE36BsYbYXDUdpy9wyMR5bbhi7cIxYBvfCRQL4aFJPaAmTq61u+fW+qai+QFIlzuS0MLbfbOkMdOPap7LGOElECAPjoMIfbO+2XNFpnXvD7U9aJjK9YePSTfoImJ7Eo9n4QNXC4phykivvOxSIcAB00WsFN3M6XVsAG86kYyLfrODqyc7zhfkbR+B5bku4RDDzNXfU9l6yGRE+9zBy3+gHjn2GVjoqEgXGH4FYFtT9AecYCJxXPMiL3MLc/UGimssuAdr7fXHEtK/NVVz6ttpf0yA7SPXVZryigU82gdMxEM/H4nfyA+hJkp9zs8mI6m7EHW+3YRHCwNsBt5e7/jzVEGsMvUQ96pZP36q1EZOx4cLl/XhvJK53gqni+M+dGEGf0UUsbaEFSnwpgnns+Y3OLNtNvpTft1gsE3fY5nKJGye5DWMM9XlTfkzdjJ5BgvAM6YSbPyhux00bL4KKxPJdhmuFYfWpMBvjDMi5yVQJz7L38LmjrTCRKdpkI1lsLwFOMC20cnMZ7vuxXtGEPC0spo8CgOFRIxBmTo77z33+pSn767RzBDRDSVNmWb2c3CIcfFisutX/bHokB8Y4NhKH+maQkkp7/sSx71X8OGjzT2+MStSYJ0Mfp0+3WJ0hpmE0vj5WE1oRK8DIxs/wAg0D1ztLvCr4AKlQrBAeoUUcLFmUsKQqxMjieA/5qBlrseBkPd3ugvSY18vqItlypmvyKrWBEI5Qs1mc0RczfEHAWCEGSLsG0nysEgbySAzsSu1aW8XHxP/O8jSnv0X7npvaaqRj3qrh/ycPa15FsydQiZZqdQLaCwX+CHSLDJMUQk1WjlWhBuk7ghzx3jLsfEOjSShCoAHpkz4la7VSzXBDlR6/dkPv9KyQAL+zp1PlbfeYuFcj25OTLnkL6uVYIMJggWKMiZRL1/xucXVR/kvpeRgCRIH6oj0bhkaItB7OaQ5U8ILU9Zqv3VNZqY8HDu3DhjQn6c6rdGaRf80Z+2R3CSSgBwXDpf3Ox2Np/GP9+hiuYg9p2b5EmdT+TunPzFZv4k/T2LzjmmHnQ+3JRM+84LZVXx1c/nVaMUuWvgW42S0Zz6IRPrHxnnDh0o7bXFgahjDohgou0Q4ojAkDmTo/uLLjRwSNRzUQB69w7JBabF95eVDslfnRB3++gqrCaf0Zgcwz7bbx5jHxTxJ8QTJMvBV3LhYQK7udGD6gpauz+xgNiesKyFTbUlJOMAFt0+3kWAe6DEq6uSzpZ4BaKkYYYaF3mUOnbhqw/3Uml3ikBWx1zJ71g91ctxEDZWkzIrjTVRvB9tyQOrAGjM4n272SNep9Dqbua2SycSIVOExe5zb+/QH38CBq1qJY68lgSPunyRq8mrVl5LmRUDg9FyhfzPRvS7gUcDXgiRiyCaKkFneAXa/5Htn2+GNWbQh3HI2y0Luvxy1VHcvVOFh4EdFEXOtC0beJBwfwMgVIb5Hd82VIzBiKT7DgdBCUMVlDzVmWkhGW/1HRnRmhknJGw1NN8oQfIJ/mfJfBzYanPW3E2l1hxaGHuxNQt8vc+G5txr0cxN69F2HzMlbp45xOF0lZmYAhD/zplj5QxqZF2te+Unra643FwFU5iEwvHAPOeSfQGp3nVfe1CW34VPVGld9nur1bPpHjhI0TxOmpaXzsNow+hMFy6PjaEaotsTrfzhOoqw9GdEg76WGh42S/bVe3KSPuox+y/DV4TA6CP5nTDyczZhqgTzavEB1o2LJRbRK8e1qEMvXpJCtQmHAbsOS+WnDmKFbT37mjfxfhYkyZyrPQXuICwNZlGlfRslHcCjPfUl4lPbSgoAa02yUhUE2B0rXRR4WtAW2d5mArYxE90N/pTWExnJ15Y5Fc+IE0lS6UoZifjwC4uZ3NnIsJhAGYj/wvn6gOOYUxJN/ytOVKaQ/i1fCVKTWhgPaqQ54F0RkVdhPfyqEXQ6GmX6NvQJtJatN+T4BC9v+sfqq937upibZXKqtUxSNvRMvrKrI5w+1GeTCgxi5E29u2PrPC4C3WRCNV2Y22NIxyYP8ge7WT3hFs9tbSMjnQONE0gZkNT7sv8HR07ceZ4aOD2wlWEAPGFWdT9eIvioyeeUgmdvkyoyvBblDT72k0VQa0QiZgQUzdeWPBDMpsTTnLIkADZsCPkWnrZ+cTFr2jUjk8e+zelCvx2f3JdrerRJnB1Epip0/1FvGR69CqnEGIrQA8WRqr4bwopj6/XZGDmzVjguCbyozX4yFHb7PkNps2TvCpegHnIJjHxpfRT/RVcYKdaH6O+al6K33WBrf6xKqJd2xlWao1z9k/L2pl9bLHrLtJMbTSRCGFo2oxFe0jU5c/+EdfQD9Mbyad2daT7HaI/wS/Riqnywu2AgBHkEqU96CAys+PXfps/wbR5LL4cIOVhBNToHVSovpLIIwDYKJeKTWFnOHgV6XUROSd8St9wJCndBKcpbEz89iV/YZDQ6YS+folFpeN+FhgW9E4Ye7p3gtyh6kmZBBfGO/jWFplCz4P/hNS7A9NVTFq6/FkPsWl8GoPvotuV4oZGMfafXW+IQ4QOR7ccuCfxqNwgGsZ/XvglshV4YC6cs9DT8ENORR4mQfNnjbz9LPL+l4XTxlDpx8os4eO8Pyhz+S10oZDR3P+OpmDxvvl8gP+WQL9kVWfCqG6f7P+NGtKcmOVCCjchj1tbcAF/5WwtScVYn8Vmu+R2347MJ2EKXEfS4Lircphvu81uQF2tB/i1YrBsyRyWDMfPEeMwaU69ShhKhgg/e1sOqcoCxCcQ92lTRDviqb2TAASrP8p1GwxO/GWYmEdOKi1iHDAEbIlyRRlNabUjjZBjHHXvRfEvPw5V7Txy42wbRn6ObZq3XTAZUOw1OkTx6CORJ0k/Tq8xGDpUqCHhuQZFWDHUEqt9vDr/SRzlo9kNgHso0uRvsxt0m1GAvusCUJNWQUvzPHyfd54VVCSCDjEzk7/vlf9DTYjEziLX4nLpCCExQTW+x9RF1nw2kGI5HnMeapCnupCH0Vm8GcW7MshsXFFGQejGTR0WFaOYljjegtPx+3k/PL4y7Klf1pxHnXG+8AyrMicur1Cl8Tzoh1dXCSxIGd9PGQjnJNab7Rth165o2TjOTmEw+PFOAocsfPv8XwVnAo6Bm25E1OqUBWKnPAL2I7TpXvSS0fTbx9c1vTeehWp94DnEKR45+GNscGTvVquNmymhVYxDWcsWug==", "iter": 250000};
+const ENC = {"salt": "lLbtQstWEXowC5oyVxoMhg==", "iv": "IiTFQK8SPcuE4QER", "ct": "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", "iter": 250000};
 let EMBED = false; try { EMBED = window.top !== window; } catch (e) { EMBED = true; }
 const $ = s => document.querySelector(s);
 let P = null, state = { hours: {}, rates: {}, view: "both", rank: null, ucs: null, sb: null, tier: "Family", ye: true };
@@ -281,6 +401,8 @@ function init() {
   for (const id of ["rank", "ucs", "sb", "tier", "ye"]) $("#" + id).addEventListener("input", update);
   $("#showth").onchange = () => { document.body.classList.toggle("show-th", $("#showth").checked); };
   document.querySelectorAll("#views button").forEach(b => b.onclick = () => { state.view = b.dataset.v; update(); });
+  $("#build").onclick = buildFromText;
+  $("#desc").addEventListener("keydown", e => { if (e.key === "Enter") buildFromText(); });
   $("#print").onclick = () => window.print();
   if (EMBED) { $("#print").style.display = "none"; $("#copylink").style.display = "none"; }
   $("#copylink").onclick = async () => {
@@ -290,6 +412,18 @@ function init() {
     setTimeout(() => $("#copylink").textContent = "Copy link to this scenario", 1800);
   };
   fillGrid(); update();
+}
+function buildFromText() {
+  const r = CompModel.parseDescription($("#desc").value, P);
+  if (!r.read.length) { $("#readback").innerHTML = '<span style="color:#a12">' + esc(r.warnings.join(" ")) + "</span>"; return; }
+  state.hours = r.hours; $("#preset").value = "";
+  if (r.rank) $("#rank").value = r.rank;
+  fillGrid(); update();
+  const rk = $("#rank").value;
+  const warn = r.warnings.slice();
+  if (rk && !/assistant/i.test(rk)) warn.push("UCS and the AAMC benchmarks are still the Assistant Professor values.");
+  $("#readback").innerHTML = "<b>Read as</b> " + esc((r.rank ? r.rank + ", " : "") + r.total.toLocaleString("en-US") + " hours. " + r.read.join(", ") + ".") +
+    (warn.length ? ' <span style="color:#a12">' + esc(warn.join(" ")) + "</span>" : "");
 }
 function buildGrid() {
   let h = '<tr><th>Site and shift</th><th>Rate per hour</th><th class="th-col">TeamHealth pays</th><th>Hours per year</th><th>Base pay</th></tr>';
